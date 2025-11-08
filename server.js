@@ -2,6 +2,7 @@ const { Command } = require('commander');
 const http = require('http');
 const fs = require('fs/promises');
 const path = require('path');
+const superagent = require('superagent')
 
 const program = new Command();
 
@@ -13,19 +14,44 @@ program
 program.parse(process.argv);
 const { host, port, cache } = program.opts();
 
-async function handleGetFromCache(res, cacheFilePath) {
+async function handleGetRequest(res, cacheFilePath, httpStatusCode) {
+    let imageBuffer;
+
     try {
-        const imageBuffer = await fs.readFile(cacheFilePath);
+        imageBuffer = await fs.readFile(cacheFilePath);
+
         res.writeHead(200, { 'Content-Type': 'image/jpeg' });
-        res.end(imageBuffer);
+        return res.end(imageBuffer);
+
     } catch (error) {
-        if (error.code === 'ENOENT') {
-            res.writeHead(404, { 'Content-Type': 'text/plain' });
-            res.end('File not found in cache.');
-        } else {
+        if (error.code !== 'ENOENT') {
             res.writeHead(500);
-            res.end('Internal Server Error');
-        }
+            return res.end('Internal Server Error');
+        } 
+
+        const httpCatUrl = `https://http.cat/${httpStatusCode}`;
+        console.log(`Cache miss for /${httpStatusCode}. Fetching from ${httpCatUrl}`);
+
+        try {
+            const response = await superagent
+            .get(httpCatUrl)
+            .buffer(true)
+            .parse(superagent.parse.image);
+
+            imageBuffer = response.body;
+
+            await fs.writeFile(cacheFilePath, imageBuffer);
+            console.log(`Successfully fetched and cached /${httpStatusCode}`);
+
+            res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+            return res.end(imageBuffer);
+
+        } catch (proxyError) {
+            console.error(`Failed to fetch from http.cat: ${proxyError.message}`);
+
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            return res.end('Image not found on http.cat');
+        }    
     }
 }
 
@@ -79,7 +105,7 @@ async function proxyHandler(req, res) {
 
     switch (req.method) {
         case 'GET':
-            return handleGetFromCache(res, cacheFilePath);
+            return handleGetRequest(res, cacheFilePath, httpStatusCode);
 
         case 'PUT':
             return handlePutRequest(req, res, cacheFilePath);
