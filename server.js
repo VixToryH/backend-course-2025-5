@@ -29,6 +29,26 @@ async function handleGetFromCache(res, cacheFilePath) {
     }
 }
 
+async function handlePutRequest(req, res, cacheFilePath) {
+    const body = [];
+
+    req.on('data', chunk => body.push(chunk));
+
+    req.on('end', async () => {
+        const imageBuffer = Buffer.concat(body);
+
+        try {
+            await fs.writeFile(cacheFilePath, imageBuffer);
+            res.writeHead(201, { 'Content-Type': 'text/plain' });
+            res.end('File created/updated successfully');
+        } catch (error) {
+            console.error('PUT failed:', error);
+            res.writeHead(500);
+            res.end('Failed to save file to cache.');
+        }
+    });
+}
+
 async function proxyHandler(req, res) {
     const urlParts = req.url.split('/');
     const httpStatusCode = urlParts[1];
@@ -40,12 +60,17 @@ async function proxyHandler(req, res) {
 
     const cacheFilePath = path.join(cache, `${httpStatusCode}.jpeg`);
 
-    if (req.method === 'GET') {
-        return handleGetFromCache(res, cacheFilePath);
-    }
+    switch (req.method) {
+        case 'GET':
+            return handleGetFromCache(res, cacheFilePath);
 
-    res.writeHead(405, { 'Content-Type': 'text/plain', 'Allow': 'GET' });
-    res.end('Method not allowed');
+        case 'PUT':
+            return handlePutRequest(req, res, cacheFilePath);
+
+        default:
+            res.writeHead(405, { 'Content-Type': 'text/plain', 'Allow': 'GET, PUT' });
+            res.end('Method not allowed');
+    }
 }
 
 async function checkAndCreateCacheDir(dirPath) {

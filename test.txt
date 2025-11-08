@@ -1,1 +1,2 @@
 curl http://localhost:3000/200 --output out.jpg
+curl -X PUT --data-binary @test.jpg http://localhost:3000/200
