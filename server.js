@@ -49,6 +49,23 @@ async function handlePutRequest(req, res, cacheFilePath) {
     });
 }
 
+async function handleDeleteRequest(res, cacheFilePath) {
+    try {
+        await fs.unlink(cacheFilePath);
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('File deleted successfully');
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('File not found in cache.');
+        } else {
+            console.error('DELETE failed:', error);
+            res.writeHead(500);
+            res.end('Failed to delete file.');
+        }
+    }
+}
+
 async function proxyHandler(req, res) {
     const urlParts = req.url.split('/');
     const httpStatusCode = urlParts[1];
@@ -67,8 +84,14 @@ async function proxyHandler(req, res) {
         case 'PUT':
             return handlePutRequest(req, res, cacheFilePath);
 
+        case 'DELETE':
+            return handleDeleteRequest(res, cacheFilePath);    
+
         default:
-            res.writeHead(405, { 'Content-Type': 'text/plain', 'Allow': 'GET, PUT' });
+            res.writeHead(405, { 
+                'Content-Type': 'text/plain',
+                'Allow': 'GET, PUT, DELETE' 
+            });
             res.end('Method not allowed');
     }
 }
